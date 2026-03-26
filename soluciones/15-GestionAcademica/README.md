@@ -1,0 +1,2244 @@
+# 🎓 Guía Maestra: Sistema de Gestión Académica (DAW)
+
+
+---
+
+## 1. El Problema y el Enunciado
+El centro educativo ***"DAW Academy"*** requiere un sistema para gestionar su base de datos de **Estudiantes** y **Docentes**.
+
+### El Reto Académico
+No se trata solo de almacenar datos, sino de garantizar su **integridad** y permitir la toma de decisiones mediante **informes estadísticos**.
+*   **Gestión de Entidades:** Manejo de jerarquías (Herencia) para evitar redundancia de datos.
+*   **Validación de Dominio:** Los datos deben cumplir reglas estrictas (DNI válido, notas en rango, experiencia no negativa).
+*   **Motor de Búsqueda:** Implementar filtrado dinámico y ordenación multiaxis (por Nota, por Experiencia, por DNI, etc.).
+*   **Optimización:** Implementar una caché LRU para optimizar las lecturas repetidas por ID.
+*   **Estructuras de Datos:** Se usa `Dictionary` para búsquedas O(1) en el Repository.
+
+---
+
+### Requisitos Funcionales, No Funcionales y de Información del Sistema
+
+Los requisitos funcionales describen las operaciones que el sistema debe realizar. Se organizan por actor y por categoría de funcionalidad.
+
+#### 1.1 Gestión de Personas (General)
+
+| Código   | Requisito       | Descripción                                                                                                                                                       |
+| -------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-GP-01 | Listar Personal | El sistema deberá mostrar un listado completo de todo el personal (estudiantes y docentes) ordenado por diferentes criterios (ID, DNI, Apellidos, Nombre, Ciclo). |
+| RF-GP-02 | Buscar por DNI  | El sistema deberá permitir buscar cualquier persona mediante su DNI, mostrando sus datos completos.                                                               |
+| RF-GP-03 | Buscar por ID   | El sistema deberá permitir buscar cualquier persona mediante su identificador único (ID).                                                                         |
+| RF-GP-04 | Listado HTML    | El sistema deberá generar y mostrar un listado completo en formato HTML que se abra automáticamente en el navegador.                                             |
+
+#### 1.2 Gestión de Estudiantes
+
+| Código   | Requisito              | Descripción                                                                                                                                                                       |
+| -------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-GE-01 | Listar Estudiantes     | El sistema deberá mostrar un listado de estudiantes ordenado por diferentes criterios (ID, DNI, Apellidos, Nombre, Nota, Curso, Ciclo).                                           |
+| RF-GE-02 | Añadir Estudiante      | El sistema deberá permitir registrar nuevos estudiantes con validación completa (DNI válido, nombre, apellidos, nota 0-10, ciclo y curso).                                        |
+| RF-GE-03 | Actualizar Estudiante  | El sistema deberá permitir modificar los datos de un estudiante existente tras verificar su existencia mediante DNI.                                                              |
+| RF-GE-04 | Gestionar Baja Estudiante | El sistema permitirá marcar como baja (borrado lógico) a un estudiante tras buscarlo por DNI, preservando su historial. También permitirá su reactivación mediante la actualización. |
+| RF-GE-05 | Informe de Rendimiento    | El sistema deberá generar informes estadísticos de estudiantes con métricas (total, media, aprobados, suspensos) y filtrado por alcance (global, ciclo, curso, clase específica). Solo considera estudiantes activos. |
+| RF-GE-06 | Informe HTML Rendimiento | El sistema deberá generar y mostrar un informe de rendimiento en formato HTML que se abra automáticamente en el navegador.                                                |
+| RF-GE-07 | Paginación de Listados    | El sistema permitirá recuperar estudiantes de forma paginada para mejorar la eficiencia del repositorio. |
+
+#### 1.3 Gestión de Docentes
+
+| Código   | Requisito              | Descripción                                                                                                                                   |
+| -------- | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-GD-01 | Listar Docentes        | El sistema deberá mostrar un listado de docentes ordenado por diferentes criterios (ID, DNI, Apellidos, Nombre, Experiencia, Módulo, Ciclo).  |
+| RF-GD-02 | Añadir Docente         | El sistema deberá permitir registrar nuevos docentes con validación completa (DNI válido, nombre, apellidos, experiencia ≥ 0, módulo, ciclo). |
+| RF-GD-03 | Actualizar Docente     | El sistema deberá permitir modificar los datos de un docente existente tras verificar su existencia mediante DNI.                             |
+| RF-GD-04 | Gestionar Baja Docente | El sistema permitirá marcar como baja (borrado lógico) a un docente tras buscarlo por DNI, preservando su historial. También permitirá su reactivación mediante la actualización. |
+| RF-GD-05 | Informe de Experiencia | El sistema deberá generar informes estadísticos de docentes con métricas (total, experiencia media) y filtrado por ciclo. Solo considera docentes activos. |
+| RF-GD-06 | Informe HTML Experiencia | El sistema deberá generar y mostrar un informe de experiencia en formato HTML que se abra automáticamente en el navegador.                  |
+| RF-GD-07 | Mantenimiento (Vacuum) | El sistema permitirá compactar el almacén binario eliminando fragmentación física pero manteniendo íntegro el historial de bajas. |
+
+#### 1.4 Gestión de Importación/Exportación
+
+| Código   | Requisito              | Descripción                                                                                                                                 |
+| -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-IE-01 | Importar Datos        | El sistema deberá permitir importar datos desde un archivo externo en el formato configurado, validando la integridad de los datos.            |
+| RF-IE-02 | Exportar Datos        | El sistema deberá permitir exportar todos los datos actuales a un archivo externo en el formato configurado.                                     |
+
+#### 1.5 Gestión de Backup
+
+| Código   | Requisito              | Descripción                                                                                                                                 |
+| -------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| RF-BK-01 | Realizar Backup       | El sistema deberá crear una copia de seguridad en formato ZIP contendo los datos en el formato configurado (JSON por defecto).             |
+| RF-BK-02 | Restaurar Backup      | El sistema deberá permitir restaurar una copia de seguridad desde un archivo ZIP, reemplazando todos los datos actuales.                     |
+| RF-BK-03 | Listar Backups        | El sistema deberá mostrar un listado de las copias de seguridad disponibles con su fecha, tamaño y ubicación.                               |
+
+---
+
+### 1.6 Requisitos No Funcionales
+
+Los requisitos no funcionales describen las cualidades y restricciones del sistema.
+
+| Código | Requisito | Descripción |
+|--------|-----------|-------------|
+| RNF-01 | Rendimiento | Las búsquedas por ID y DNI deben ser O(1). |
+| RNF-02 | Integridad | El DNI debe ser único y válido. No se permiten duplicados incluso tras bajas. |
+| RNF-03 | Persistencia | Los datos deben persistir entre ejecuciones (excepto en repositorio Memory). |
+| RNF-04 | Configurabilidad | El tipo de repositorio, storage y backup debe ser configurable sin recompilar. |
+| RNF-05 | Robustez | El sistema debe manejar errores de forma correcta con mensajes claros al usuario. |
+| RNF-06 | Trazabilidad | Todas las operaciones deben estar registradas en log. |
+| RNF-07 | Recuperación | El sistema debe permitir restaurar desde backup en caso de pérdida de datos. |
+
+---
+
+### 1.7 Requisitos de Información
+
+Los requisitos de información describen los datos que el sistema debe gestionar y mantener.
+
+#### 1.7.1 Entidades del Sistema
+
+| Entidad        | Atributos                                                   | Descripción                                                                                       |
+| -------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **Persona**    | Id, Dni, Nombre, Apellidos, CreatedAt, UpdatedAt, IsDeleted | Clase base abstracta que representa cualquier persona del sistema. Identidad única basada en DNI. |
+| **Estudiante** | Calificacion (0-10), Ciclo, Curso                           | Hereda de Persona. Representa a un alumno con su rendimiento académico.                           |
+| **Docente**    | Experiencia (años), Especialidad, Ciclo                     | Hereda de Persona. Representa a un profesor con su experiencia profesional.                       |
+
+#### 1.7.2 ValoresEnumerados
+
+| Enum                 | Valores                                                             | Descripción                                        |
+| -------------------- | ------------------------------------------------------------------- | -------------------------------------------------- |
+| **Ciclo**            | DAM, DAW, ASIR                                                      | Ciclos formativos disponibles en el centro.        |
+| **Curso**            | Primero, Segundo                                                    | Curso académico dentro del ciclo.                  |
+| **TipoOrdenamiento** | Id, Dni, Apellidos, Nombre, Nota, Experiencia, Curso, Ciclo, Modulo | Criterios de ordenación disponibles para listados. |
+| **OpcionMenu**       | 0-17                                                                | Opciones del menú principal de la aplicación.      |
+| **TipoPersona**      | Estudiante, Docente                                                 | Tipo de persona del sistema.                       |
+| **RepositoryType**   | Memory, Binary, Json                                                | Tipos de repositorio disponibles.                  |
+
+#### 1.7.3 DatosDerivados
+
+| Atributo                    | Fórmula/Descripción                                                    | Entidad           |
+| --------------------------- | ---------------------------------------------------------------------- | ----------------- |
+| **NombreCompleto**          | Concatenación de Nombre + Apellidos                                    | Persona           |
+| **CalificacionCualitativa** | Suspenso (<5), Aprobado (5-6.9), Notable (7-8.9), Sobresaliente (9-10) | Estudiante        |
+| **PorcentajeAprobados**     | (Aprobados / Total) * 100                                              | InformeEstudiante |
+
+---
+
+### 1.8 Diagrama de Casos de Uso UML
+
+A continuación se presenta el diagrama de casos de uso que modela las interacciones entre los actores y el sistema:
+
+```mermaid
+graph LR
+    subgraph SISTEMA["LÍMITE DEL SISTEMA"]
+        subgraph PERSONAS["Gestión de Personas"]
+            LP["Listar Personas"]
+            BD["Buscar por DNI"]
+            BID["Buscar por ID"]
+            LPH["Listar Personas HTML"]
+            EXT1["Ordenar por ID / DNI / Nombre / Apellidos / Ciclo"]
+        end
+        
+        subgraph ESTUDIANTES["Gestión de Estudiantes"]
+            LE["Listar Estudiantes"]
+            AE["Añadir Estudiante"]
+            AEE["Actualizar Estudiante"]
+            XE["Eliminar Estudiante"]
+            IRE["Informe Rendimiento"]
+            IREH["Informe Rendimiento HTML"]
+            EXT2["Ordenar por ID / DNI / Nombre / Apellidos / Nota / Curso / Ciclo"]
+            EXT3["Filtrar Global / Ciclo / Curso / Clase Específica"]
+        end
+        
+        subgraph DOCENTES["Gestión de Docentes"]
+            LD["Listar Docentes"]
+            AD["Añadir Docente"]
+            ADD["Actualizar Docente"]
+            XD["Eliminar Docente"]
+            IEX["Informe Experiencia"]
+            IEXH["Informe Experiencia HTML"]
+            EXT4["Ordenar por ID / DNI / Nombre / Apellidos / Experiencia / Módulo / Ciclo"]
+            EXT5["Filtrar Global / Ciclo"]
+        end
+        
+        subgraph IMPORTEXPORT["Gestión de Importación/Exportación"]
+            ID["Importar Datos"]
+            ED["Exportar Datos"]
+        end
+        
+        subgraph BACKUP["Gestión de Backup"]
+            CB["Crear Backup"]
+            RB["Restaurar Backup"]
+            LB["Listar Backups"]
+        end
+    end
+    
+    USUARIO((Usuario))
+    
+    USUARIO --> LP
+    USUARIO --> BD
+    USUARIO --> BID
+    USUARIO --> LPH
+    USUARIO --> LE
+    USUARIO --> AE
+    USUARIO --> AEE
+    USUARIO --> XE
+    USUARIO --> IRE
+    USUARIO --> IREH
+    USUARIO --> LD
+    USUARIO --> AD
+    USUARIO --> ADD
+    USUARIO --> XD
+    USUARIO --> IEX
+    USUARIO --> IEXH
+    USUARIO --> ID
+    USUARIO --> ED
+    USUARIO --> CB
+    USUARIO --> RB
+    USUARIO --> LB
+    
+    AEE -.->|include| BD
+    XE -.->|include| BD
+    ADD -.->|include| BD
+    XD -.->|include| BD
+    
+    EXT1 -.->|extend| LP
+    EXT2 -.->|extend| LE
+    EXT3 -.->|extend| IRE
+    EXT4 -.->|extend| LD
+    EXT5 -.->|extend| IEX
+```
+
+#### Leyenda
+
+| Elemento           | Descripción                                      |
+| ------------------ | ------------------------------------------------ |
+| **(Usuario)**      | Actor externo al sistema                         |
+| **Rectángulos**    | Casos de uso del sistema                         |
+| **→**              | Association (línea continua)                     |
+| **-. include .->** | Include - relación obligatoria (base → incluido) |
+| **<-. extend .-**  | Extend - relación opcional (extendido → base)    |
+
+#### Descripción de las Relaciones
+
+**Include (línea discontinua):**
+- `Actualizar Estudiante` → `Buscar DNI`: Para modificar, primero debe localizarse.
+- `Eliminar Estudiante` → `Buscar DNI`: Para eliminar, primero debe localizarse.
+- `Actualizar Docente` → `Buscar DNI`: Para modificar, primero debe localizarse.
+- `Eliminar Docente` → `Buscar DNI`: Para eliminar, primero debe localizarse.
+
+**Extend (línea discontinua):**
+- Los listados pueden extenderse con criterios de ordenación.
+- Los informes pueden extenderse con filtros por ciclo/curso.
+
+---
+
+**Parametrizaciones de Ordenación (Extend):**
+
+| Listado                | Criterios de ordenación disponibles                    |
+| ---------------------- | ------------------------------------------------------ |
+| **Listar Personas**    | ID, DNI, Nombre, Apellidos, Ciclo                      |
+| **Listar Estudiantes** | ID, DNI, Nombre, Apellidos, Nota, Curso, Ciclo         |
+| **Listar Docentes**    | ID, DNI, Nombre, Apellidos, Experiencia, Módulo, Ciclo |
+
+---
+
+**Parametrizaciones de Informes (Extend):**
+
+| Informe                 | Niveles de filtrado disponibles                |
+| ----------------------- | ---------------------------------------------- |
+| **Informe Estudiantes** | Global, Por Ciclo, Por Curso, Clase Específica |
+| **Informe Docentes**    | Global, Por Ciclo                              |
+
+---
+
+## 2. Arquitectura del Sistema (Capas)
+El proyecto implementa una **Arquitectura en Capas** (N-Tier Architecture) con **Inyección de Dependencias**, lo que garantiza que el sistema sea modular y escalable.
+
+```mermaid
+graph TD
+    %% Estilos de Capas
+    classDef capaUI fill:#fff0f6,stroke:#ff85c0,stroke-width:3px,color:#000000,font-weight:bold;
+    classDef capaBLL fill:#e6f7ff,stroke:#1890ff,stroke-width:3px,color:#000000,font-weight:bold;
+    classDef capaDAL fill:#f6ffed,stroke:#52c41a,stroke-width:3px,color:#000000,font-weight:bold;
+    classDef capaModel fill:#fffbe6,stroke:#faad14,stroke-width:3px,color:#000000,font-weight:bold;
+    classDef capaDI fill:#f3e5f5,stroke:#9c27b0,stroke-width:3px,color:#000000,font-weight:bold;
+    classDef capaConfig fill:#e3f2fd,stroke:#2196f3,stroke-width:3px,color:#000000,font-weight:bold;
+
+    %% Estilos de Componentes
+    classDef comp fill:#ffffff,stroke:#333333,stroke-width:1px,color:#000000;
+    classDef config fill:#e3f2fd,stroke:#2196f3,stroke-width:1px,color:#000000;
+
+    subgraph Config [⚙️ CONFIGURACIÓN]
+        CF[appsettings.json]
+    end
+
+    subgraph DI [🔧 CONFIGURACIÓN DI]
+        DP[DependenciesProvider]
+    end
+
+    subgraph Runtime [🚀 RUNTIME]
+        subgraph UI [🖥️ PRESENTACIÓN]
+            P[Program.cs]
+        end
+
+        subgraph Container [📦 CONTENEDOR DI]
+            SP[ServiceProvider]
+        end
+
+        subgraph BLL [🧠 SERVICIOS]
+            S[AcademiaService]
+            BS[BackupService]
+            RS[ReportService]
+        end
+
+        subgraph DAL [💾 DATOS]
+            R[IPersonasRepository]
+            C[ICache int, Persona]
+        end
+
+        subgraph Val [🛡️ VALIDACIÓN]
+            V[IValidador Persona]
+        end
+
+        subgraph Storage [📦 PERSISTENCIA]
+            ST[IStorage Persona]
+        end
+    end
+
+    subgraph Models [📂 DOMINIO]
+        M[Entidades, Records, Enums]
+    end
+
+    %% Aplicación de Estilos
+    class Config capaConfig;
+    class DI capaDI;
+    class UI capaUI;
+    class BLL capaBLL;
+    class DAL capaDAL;
+    class Models capaModel;
+    class P,SP,S,BS,RS,R,C,V,ST,M,CF,DP comp;
+
+    %% Flujo: Configuración
+    CF -. configures .-> DP
+    
+    %% Flujo: Configuración del contenedor
+    DP -. registers .-> SP
+    
+    %% Flujo: Ejecución
+    P --> SP
+    SP --> S
+    SP --> BS
+    SP --> RS
+    
+    %% Flujo: AcademiaService USA dependencias
+    S --> R
+    S --> C
+    S --> V
+    S --> ST
+    S --> BS
+    S --> RS
+```
+
+---
+
+## 2.1. Sistema de Inyección de Dependencias (DependenciesProvider)
+
+El proyecto utiliza **Microsoft.Extensions.DependencyInjection** para gestionar las dependencias de forma centralizada, eliminando los patrones Factory (`RepositoryFactory`, `StorageFactory`) y usando un único punto de configuración.
+
+### 🏗️ DependenciesProvider
+
+```csharp
+public static class DependenciesProvider
+{
+    public static IServiceProvider BuildServiceProvider()
+    {
+        var services = new ServiceCollection();
+        
+        RegisterStorages(services);
+        RegisterRepositories(services);
+        RegisterServices(services);
+        
+        return services.BuildServiceProvider();
+    }
+}
+```
+
+### 📋 Servicios Registrados
+
+| Servicio | Tipo de Vida | Descripción |
+|----------|-------------|-------------|
+| `IPersonasRepository` | **Singleton** | Mantiene estado en memoria (Memory) o conexión a BD |
+| `IStorage<Persona>` | **Transient** | Creado por operación (cada export/import) |
+| `ICache<int, Persona>` | **Singleton** | Caché LRU compartida |
+| `IValidador<Persona>` | **Transient** | Nuevo validador por operación |
+| `IBackupService` | **Transient** | Servicio de backup |
+| `IReportService` | **Transient** | Generación de informes HTML |
+| `IAcademiaService` | **Scoped** | Servicio principal porrequest |
+
+### 🔄 Ciclo de Vida de los Repositorios
+
+Los repositorios ahora tienen **constructores públicos** sin el patrón `.Instance`:
+
+```csharp
+public class PersonasMemoryRepository : IPersonasRepository
+{
+    private readonly ILogger _logger = Log.ForContext<PersonasMemoryRepository>();
+    
+    public PersonasMemoryRepository() : this(AppConfig.DropData, AppConfig.SeedData) { }
+
+    private PersonasMemoryRepository(bool dropData, bool seedData)
+    {
+        // Inicialización...
+    }
+}
+```
+
+### ✅ Ventajas del nuevo enfoque
+
+1. **Centralización**: Toda la configuración DI está en un solo lugar
+2. **Control de vida**: Singleton, Scoped, Transient controlado por el contenedor
+3. **Testabilidad**: Fácil reemplazar implementaciones en tests
+4. **Sin singletons manuales**: Se acabó el `.Instance` y `Lazy<T>`
+
+---
+
+### Responsabilidades Detalladas:
+
+#### 🖥️ Program (`Program.cs`)
+Es el **"Camarero"** del sistema. Su única misión es atender al usuario.
+*   **Interfaz de Usuario:** Gestiona menús, colores y formato de tablas.
+*   **Sanitización de Entrada:** Usa **Regex** para asegurar que el usuario no introduce basura.
+*   **Gestión de Resultados:** Usa `.Match()` para manejar operaciones que pueden fallar y mostrar errores de forma amigable.
+*   **Configuración de Caché:** Crea e inyecta la caché LRU con capacidad configurable.
+
+#### 🛡️ Validator (`Validators/`)
+Es la **"Aduana"** del sistema. No deja pasar ningún objeto que no cumpla las leyes.
+*   **Reglas de Integridad:** Aquí se decide qué es un DNI válido, que la nota sea 0-10 o que un docente tenga experiencia coherente.
+*   **Desacoplamiento:** El Servicio no sabe *cómo* se valida, solo sabe que el Validador retorna un Result.
+*   **Retorna Result:** Los validadores devuelven `Result<T, DomainError>` en lugar de lanzar excepciones.
+
+#### 🧠 Service (`AcademiaService`)
+Es el **"Chef"** o cerebro. Orquesta todo el proceso.
+*   **Coordinación:** Decide cuándo validar y cuándo guardar.
+*   **Transformación de Datos:** Crea los informes estadísticos.
+*   **Caché LRU:** Implementa el patrón **Look-Aside**: primero consulta la caché, si no está, va al repositorio y lo guarda en caché.
+*   **Gestión de Errores con Result:** Usa el patrón Result para operaciones que pueden fallar (GetById, Save, Update, Delete, Importar, Exportar, Backup).
+
+#### 💾 Repository (`Repositories/`)
+Es la **"Despensa"**. Gestión lógica y física de los registros.
+*   **Estrategia en Memoria:** `PersonasMemoryRepository` almacena en `Dictionary` para búsquedas O(1).
+*   **Estrategia Binaria:** `PersonasBinaryRepository` implementa motor de acceso aleatorio sobre archivos `.dat`, `.idx`, `.frag`.
+*   **Estrategia JSON:** `PersonasJsonRepository` persiste en archivo JSON.
+*   **Estrategia Dapper:** `PersonasDapperRepository` usa Dapper para acceso a SQLite.
+*   **Estrategia ADO.NET:** `PersonasAdoRepository` usa ADO.NET puro para SQLite.
+*   **Estrategia Entity Framework:** `PersonasEfRepository` usa Entity Framework Core.
+*   **Gestión de Identidad:** Asigna IDs únicos, gestiona marcas de tiempo y estado (Activo/Baja).
+*   **Inyección de Dependencias:** `DependenciesProvider` registra el repositorio según configuración (`appsettings.json`).
+
+#### 💾 BackupService (`Services/Backup/`)
+Es el **"Guardián"** de las copias de seguridad. Gestiona la creación y restauración de backups.
+*   **Creación de Backup:** Extrae datos, serializa en formato configurable (JSON por defecto) y comprime en ZIP.
+*   **Restauración:** Extrae el ZIP, carga los datos y reemplaza los existentes.
+*   **Gestión de Archivos:** Usa el directorio configurado en `appsettings.json`.
+
+#### 📊 ReportService (`Services/Report/`)
+Es el **"Generador de Informes"** del sistema. Genera informes en formato HTML visualmente atractivos.
+*   **Informes HTML:** Genera informes con estilo CSS profesional.
+*   **Tipos de Informes:**
+    *   `GenerarInformeEstudiantesHtml()` - Tabla con estadísticas, notas y estado (aprobado/suspenso).
+    *   `GenerarInformeDocentesHtml()` - Tabla con experiencia y ciclos.
+    *   `GenerarListadoPersonasHtml()` - Listado general de todo el personal.
+*   **Apertura Automática:** Los informes se generan y abren automáticamente en el navegador.
+*   **Directorio Configurable:** Se guarda en la carpeta `reports/` configurable via `appsettings.json`.
+
+#### ⚙️ Configuración (`Config/`)
+Es el **"Panel de Control"**. Lee y centraliza todas las configuraciones del sistema.
+*   **appsettings.json:** Archivo externo que define tipo de repositorio, storage, backup y ConnectionString.
+*   **DependenciesProvider:** Lee la configuración y registra los servicios apropiados en el contenedor DI.
+*   **Validación:** Los valores no reconocidos se sustituyen por valores por defecto seguros.
+
+#### ⚡ Cache (`LruCache<TKey, TValue>`)
+Es el **"buffer de acceso rápido"**. Optimiza las lecturas frecuentes.
+*   **Algoritmo LRU:** Least Recently Used - elimina el elemento menos usado al alcanzar la capacidad.
+*   **O(1) en operaciones:** Gracias a `Dictionary` + `LinkedList`.
+*   **Logging:** Registra ACIERTO/FALLO y expulsiones.
+
+#### 📦 Storage (`Storage/*`)
+Es el **"Archivo"** del sistema. Gestiona la persistencia en diferentes formatos para Import/Export.
+*   **Interfaz Común:** Usa `IStorage<T>` para abstraer el formato.
+*   **DI:** `DependenciesProvider` crea el storage según configuración.
+*   **Formatos Soportados:** JSON, XML, CSV, CSV-Alt, Texto y Binario.
+*   **Serialización:** Convierte modelos a DTOs antes de guardar y viceversa.
+
+---
+
+## 3. Gestión de Errores: Result y Errores de Dominio
+El sistema no utiliza excepciones tradicionales para el flujo de errores, sino que implementa el patrón **Result** combinado con **Errores de Dominio**. Esto permite una comunicación precisa y funcional entre las capas.
+
+### Jerarquía de Errores de Dominio
+Utilizamos records anidados para agrupar errores bajo un mismo contexto semántico:
+
+```mermaid
+classDiagram
+    class DomainError { <<Abstract>> }
+    class PersonaError { <<Abstract>> }
+    class BackupError { <<Abstract>> }
+    class NotFound { <<Sealed>> }
+    class Validation { <<Sealed>> }
+    class AlreadyExists { <<Sealed>> }
+    class StorageError { <<Sealed>> }
+
+    DomainError <|-- PersonaError
+    DomainError <|-- BackupError
+    PersonaError <|-- NotFound
+    PersonaError <|-- Validation
+    PersonaError <|-- AlreadyExists
+    PersonaError <|-- StorageError
+```
+
+### El Patrón Result
+El sistema usa `CSharpFunctionalExtensions.Result<T, TError>` para representar operaciones que pueden fallar:
+
+```csharp
+// En el Servicio: métodos que pueden fallar devuelven Result
+// Uso del patrón is {} para evitar null checks tradicionales
+public Result<Persona, DomainError> GetById(int id) {
+    if (cache.Get(id) is {} cached)
+        return Result.Success<Persona, DomainError>(cached);
+    
+    if (repository.GetById(id) is {} persona)
+    {
+        cache.Add(id, persona);
+        return Result.Success<Persona, DomainError>(persona);
+    }
+    
+    return Result.Failure<Persona, DomainError>(PersonaErrors.NotFound(id.ToString()));
+}
+```
+
+### En Program.cs: Consumo con Match
+El consumidor usa `.Match()` para manejar el resultado:
+
+```csharp
+service.GetById(id).Match(
+    onSuccess: persona => ImprimirFichaPersona(persona),
+    onFailure: error => Console.WriteLine($"❌ ERROR: {error.Message}")
+);
+```
+
+### ¿Por qué usamos Errores de Dominio con Result?
+1.  **Semántica Clara:** Es mucho más descriptivo manejar un `NotFound` que un error genérico.
+2.  **Desacoplamiento:** La Capa de Presentación no necesita conocer detalles técnicos.
+3.  **Flujo Funcional:** Permite encadenar operaciones con `Bind` y `Map`.
+4.  **Sin Excepciones en Flujo Normal:** Las excepciones solo para casos truly excepcionales.
+
+---
+
+## 3.1 ¿Por qué NO todo devuelve Result?
+
+Esta es una pregunta importante: **no todo necesita devolver Result**. Solo las operaciones que pueden **fallar por razones de negocio** deben usarlo.
+
+### Operaciones que SÍ devuelven Result (pueden fallar):
+| Operación | ¿Por qué puede fallar? |
+|-----------|----------------------|
+| `GetById(id)` | El ID no existe |
+| `GetByDni(dni)` | El DNI no existe |
+| `Save(persona)` | Validación fallida o DNI duplicado |
+| `Update(id, persona)` | No existe, validación fallida |
+| `Delete(id)` | No existe |
+| `ImportarDatos()` | Error de lectura/escritura |
+| `ExportarDatos()` | Error de lectura/escritura |
+| `RealizarBackup()` | Error de compresión/escritura |
+| `RestaurarBackup()` | Archivo corrupto o no encontrado |
+
+### Operaciones que NO devuelven Result (nunca fallan):
+| Operación | ¿Por qué siempre tiene éxito? |
+|-----------|-------------------------|
+| `GetAll()` | Siempre devuelve enumerable (puede estar vacío) |
+| `GetAllOrderBy()` | Siempre devuelve enumerable (puede estar vacío) |
+| `GetEstudiantesOrderBy()` | Siempre devuelve enumerable (puede estar vacío) |
+| `GetDocentesOrderBy()` | Siempre devuelve enumerable (puede estar vacío) |
+| `TotalPersonas` | Siempre devuelve un entero (0 si no hay datos) |
+| `ListarBackups()` | Siempre devuelve lista (vacía si no hay) |
+| `GenerarInformeEstudiante()` | Siempre devuelve informe (vacío si no hay datos) |
+| `GenerarInformeDocente()` | Siempre devuelve informe (vacío si no hay datos) |
+
+### El Principio
+> **"Si una operación siempre va a tener éxito (aunque sea con resultado vacío), no necesita Result."**
+
+Esto hace el código más simple y fácil de usar:
+- `GetAll()` → `foreach (var p in personas)` ← Simple
+- `GetById()` → `personas.GetById(id).Match(...)` ← Necesita Result porque puede no existir
+
+---
+
+## 4. Diagrama de Clases del Modelo (Detalle Completo)
+El modelo de datos refleja fielmente la realidad académica, separando las capacidades mediante interfaces.
+
+```mermaid
+classDiagram
+    class Persona {
+        <<Abstract Record>>
+        +int Id
+        +string Dni
+        +string Nombre
+        +string Apellidos
+        +string NombreCompleto*
+        +DateTime CreatedAt
+    }
+
+    class IEstudiar { <<Interface>> +Estudiar() }
+    class IDocente { <<Interface>> +ImpartirClase() }
+
+    class Estudiante {
+        <<Sealed Record>>
+        +double Calificacion
+        +Ciclo Ciclo
+        +Curso Curso
+        +string CalificacionCualitativa*
+    }
+
+    class Docente {
+        <<Sealed Record>>
+        +int Experiencia
+        +string Especialidad
+        +Ciclo Ciclo
+    }
+
+    class Ciclo { <<Enum>> DAM, DAW, ASIR }
+    class Curso { <<Enum>> Primero, Segundo }
+    class Modulos { <<Static>> +string Programacion, ... }
+
+    class InformeEstudiante {
+        <<Record>>
+        +IEnumerable~Estudiante~ PorNota
+        +double NotaMedia
+        +int Aprobados
+        +int Suspensos
+        +int TotalEstudiantes
+    }
+
+    class InformeDocente {
+        <<Record>>
+        +IEnumerable~Docente~ PorExperiencia
+        +double ExperienciaMedia
+        +int TotalDocentes
+    }
+
+    Persona <|-- Estudiante
+    Persona <|-- Docente
+    Estudiante ..|> IEstudiar
+    Docente ..|> IDocente
+    Estudiante --> Ciclo
+    Estudiante --> Curso
+    Docente --> Ciclo
+    InformeEstudiante o-- Estudiante
+    InformeDocente o-- Docente
+```
+
+---
+
+## 5. IEnumerable: El Contrato de Solo Lectura
+El sistema usa `IEnumerable<T>` como tipo de retorno en las consultas. Este es el contrato más simple posible: "te doy los datos, tú iteras".
+
+### ¿Por qué IEnumerable y no IList o ILista?
+
+| Interfaz         | Características                | Uso                   |
+| ---------------- | ------------------------------ | --------------------- |
+| `IEnumerable<T>` | Solo iteración, sin Add/Remove | Contrato de consulta  |
+| `IList<T>`       | Add, Remove, Index             | Modificación de lista |
+| `ILista<T>`      | Tu implementación propia       | Estructura de datos   |
+
+```csharp
+// El Repository devuelve IEnumerable - el llamador decide qué hacer
+public IEnumerable<Persona> GetAll() => _diccionario.Values;
+
+// El Servicio lo transforma con filtros y ordenación
+var resultado = repository.GetAll()
+    .Where(p => p.Ciclo == Ciclo.DAW)
+    .OrderBy(p => p.Nombre);
+```
+
+**Ventajas de IEnumerable:**
+1. **Desacoplamiento:** El Repository no impone cómo se usa el resultado.
+2. **Flexibilidad:** El que llama puede convertir a lista, array, o iterar directamente.
+3. **LINQ:** IEnumerable es la base de todas las operaciones LINQ (Where, OrderBy, etc.).
+4. **Lazy Evaluation:** Permite procesar grandes conjuntos de datos sin cargar todo en memoria.
+
+---
+
+## 6. El Servicio: Motor de Inteligencia y Consultas
+El `Service` no es un simple intermediario; es el **motor de orquestación** donde las reglas del mundo real se convierten en código. Su misión es transformar colecciones de datos en información estratégica.
+
+### 6.1. Inyección de Dependencias
+El Servicio recibe sus dependencias desde el exterior (Program.cs), lo que facilita el testing y el cambio de implementaciones.
+
+```csharp
+public class AcademiaService(
+    IPersonasRepository repository,
+    IValidador<Persona> valEstudiante,
+    IValidador<Persona> valDocente,
+    ICache<int, Persona> cache,
+    IBackupService backupService,
+    IReportService reportService
+) : IAcademiaService
+```
+
+### 6.2. El Hub Central: GetAllOrderBy
+Centraliza toda la lógica de ordenación del sistema usando un **Diccionario de Estrategias**.
+
+#### 6.2.1. ¿Qué es el Patrón Strategy?
+El Patrón Strategy es un patrón de diseño comportamental que permite seleccionar un algoritmo en tiempo de ejecución. En lugar de usar un gran `switch` o múltiples `if/else`, definimos cada algoritmo (estrategia) como una función y las almacenamos en un diccionario.
+
+```csharp
+// DICCIONARIO DE ESTRATEGIAS
+// ==========================
+// Clave: TipoOrdenamiento (enum con los criterios disponibles)
+// Valor: Func<IOrderedEnumerable<Persona>> (una función que devuelve una colección ordenada)
+
+var comparadores = new Dictionary<TipoOrdenamiento, Func<IOrderedEnumerable<Persona>>> {
+    { TipoOrdenamiento.Id, () => lista.OrderBy(p => p.Id) },
+    { TipoOrdenamiento.Dni, () => lista.OrderBy(p => p.Dni) },
+    // ... más estrategias
+};
+```
+
+#### 6.2.2. ¿Por qué usar un diccionario y no un switch?
+
+| Enfoque                        | Ventajas                                | Inconvenientes                               |
+| ------------------------------ | --------------------------------------- | -------------------------------------------- |
+| **switch tradicional**         | Familiar, fácil de entender             | Cada caso nuevo requiere modificar el switch |
+| **Diccionario de estrategias** | Abierto/Cerrado (Open/Closed Principle) | Menos intuitivo inicialmente                 |
+
+**El switch tradicional:**
+```csharp
+// PROBLEMA: Si quieres añadir un nuevo criterio, aquí
+return orden switch {
+    TipoOrdenamiento.Id => lista.OrderBy(p => p.Id),
+    TipoOrdenamiento.Dni => lista.OrderBy(p => p.Dni),
+    // ... 10 casos después
+    _ => lista.OrderBy(p => p.Id)
+};
+```
+
+**El diccionario de estrategias:**
+```csharp
+// SOLUCIÓN: Añadir un criterio es añadir UNA LÍNEA al diccionario
+// sin tocar el resto del código (Open/Closed Principle)
+var comparadores = new Dictionary<...> {
+    { TipoOrdenamiento.Id, () => lista.OrderBy(p => p.Id) },
+    { TipoOrdenamiento.Dni, () => lista.OrderBy(p => p.Dni) },
+    { TipoOrdenamiento.Nombre, () => lista.OrderBy(p => p.Nombre) },
+    { TipoOrdenamiento.Edad, () => lista.OrderBy(p => p.Edad) }, // Nueva línea
+};
+```
+
+#### 6.2.3. La magia de TryGetValue
+Una vez definidas las estrategias, la ejecución es trivial:
+
+```csharp
+// TryGetValue: busca la clave en el diccionario
+// Si existe, ejecuta la función asociada
+// Si no existe, usa el fallback (orden por ID)
+
+return comparadores.TryGetValue(orden, out var comparador)
+    ? comparador()      // Ejecutar la estrategia encontrada
+    : lista.OrderBy(p => p.Id);  // Fallback seguro
+```
+
+**¿Por qué TryGetValue?**
+- Evita excepciones si la clave no existe
+- Devuelve el valor directamente en el parámetro `out`
+- Más eficiente que verificar `ContainsKey` + acceder
+
+#### 6.2.4. Pattern Matching en propiedades polimórficas
+Algunos criterios (Nota, Experiencia) solo aplican a ciertos tipos. Usamos pattern matching para manejar esto de forma segura:
+
+```csharp
+{ TipoOrdenamiento.Nota, () => lista.OrderByDescending(p => 
+    p is Estudiante e ? e.Calificacion : -1) },
+```
+
+**Desglose:**
+1. `p is Estudiante e` - ¿Es Estudiante? Si sí, guarda en `e`
+2. `e.Calificacion` - Accedemos a la propiedad del tipo derivado
+3. `: -1` - Si no es Estudiante, devolvemos -1 (va al final)
+
+**Ventajas:**
+- **Seguridad de tipos:** El compilador garantiza que solo accedemos a propiedades válidas
+- **Legibilidad:** El código dice claramente qué queremos hacer
+- **Flexibilidad:** Se ordena correctamente cada tipo
+
+```csharp
+// RESULTADO:
+// Estudiantes: ordenados por nota (9, 8, 7, ...)
+// Docentes: aparecen al final con valor -1
+```
+
+#### 6.2.5. Código completo del Hub
+
+```csharp
+public IEnumerable<Persona> GetAllOrderBy(
+    TipoOrdenamiento orden = TipoOrdenamiento.Dni,
+    Predicate<Persona>? filtro = null)
+{
+    // PASO 1: Obtener datos del repositorio
+    var lista = filtro == null
+        ? repository.GetAll()
+        : repository.GetAll().Where(p => filtro(p));
+
+    // PASO 2: Definir estrategias de ordenación
+    var comparadores = new Dictionary<TipoOrdenamiento, Func<IOrderedEnumerable<Persona>>> {
+        { TipoOrdenamiento.Id, () => lista.OrderBy(p => p.Id) },
+        { TipoOrdenamiento.Dni, () => lista.OrderBy(p => p.Dni) },
+        { TipoOrdenamiento.Nombre, () => lista.OrderBy(p => p.Nombre) },
+        { TipoOrdenamiento.Apellidos, () => lista.OrderBy(p => p.Apellidos) },
+        { TipoOrdenamiento.Ciclo, () => lista.OrderBy(p => ObtenerCicloTexto(p)) },
+        { TipoOrdenamiento.Nota, () => lista.OrderByDescending(p => 
+            p is Estudiante e ? e.Calificacion : -1) },
+        { TipoOrdenamiento.Experiencia, () => lista.OrderByDescending(p => 
+            p is Docente d ? d.Experiencia : -1) },
+        { TipoOrdenamiento.Curso, () => lista.OrderBy(p => 
+            p is Estudiante e ? (int)e.Curso : int.MaxValue) },
+    };
+
+    // PASO 3: Ejecutar la estrategia seleccionada
+    return comparadores.TryGetValue(orden, out var comparador)
+        ? comparador()
+        : lista.OrderBy(p => p.Id);  // Fallback por seguridad
+}
+```
+
+**Ventajas del patrón Strategy:**
+1. **Open/Closed Principle:** Añadir criterios sin modificar código existente
+2. **Desacoplamiento:** Cada estrategia es independiente
+3. **Testeabilidad:** Cada estrategia se puede probar aisladamente
+4. **Legibilidad:** Toda la lógica de ordenación en un solo lugar
+
+### 6.3. Generación de Informes
+Los informes se construyen aplicando filtros y calculando métricas.
+
+```csharp
+public InformeEstudiante GenerarInformeEstudiante(Ciclo? ciclo, Curso? curso) {
+    var estudiantes = GetEstudiantesOrderBy(TipoOrdenamiento.Nota)
+        .Where(e => (ciclo == null || e.Ciclo == ciclo) && 
+                    (curso == null || e.Curso == curso))
+        .ToList();
+
+    var total = estudiantes.Count;
+    if (total == 0) return new InformeEstudiante();
+
+    return new InformeEstudiante {
+        PorNota = estudiantes,
+        TotalEstudiantes = total,
+        Aprobados = estudiantes.Count(e => e.Calificacion >= 5.0),
+        Suspensos = estudiantes.Count(e => e.Calificacion < 5.0),
+        NotaMedia = estudiantes.Average(e => e.Calificacion)
+    };
+}
+```
+
+**Nota sobre `.ToList()`:** Se materializa el IEnumerable en una lista para poder contar varias veces (Aprobados, Suspensos) sin iterar múltiples veces sobre la colección.
+
+---
+
+## 7. Análisis de Principios SOLID y DRY
+Has aplicado los estándares de la industria para garantizar que el código sea mantenible, escalable y fácil de entender.
+
+### 📐 Principios SOLID
+
+#### **S - Single Responsibility (Responsabilidad Única)**
+Cada clase tiene una única misión. Por ejemplo, el `ValidadorEstudiante` solo se encarga de las reglas de integridad, sin saber nada de menús o de cómo se guardan los datos.
+
+```csharp
+// El validador solo valida, no persiste ni imprime
+public class ValidadorEstudiante : IValidador<Persona> {
+    public IEnumerable<string> Validar(Persona persona) {
+        var errores = new List<string>();
+        if (persona is not Estudiante estudiante) {
+            errores.Add("La entidad no es un Estudiante.");
+            return errores;
+        }
+        if (estudiante.Calificacion is < 0 or > 10)
+            errores.Add("La calificación debe estar entre 0.0 y 10.0.");
+        // ...
+        return errores;
+    }
+}
+```
+
+#### **O - Open/Closed (Abierto/Cerrado)**
+El sistema permite añadir funcionalidades nuevas (extender) sin modificar el código que ya funciona. Lo logras mediante **inversión de dependencias**.
+
+```csharp
+// GetAllOrderBy usa un diccionario de estrategias.
+// Para añadir un nuevo criterio, solo añaden una línea al mapa:
+{ TipoOrdenamiento.Edad, () => lista.OrderBy(p => p.Edad) }
+```
+
+#### **L - Liskov Substitution (Sustitución de Liskov)**
+El repositorio almacena `Persona` (clase base), pero el programa funciona perfectamente inyectando `Estudiante` o `Docente`. La clase base es totalmente sustituible por sus hijas.
+
+```csharp
+// El repositorio acepta cualquier subtipo de Persona
+_diccionario[id] = new Estudiante { ... };
+_diccionario[id] = new Docente { ... };
+```
+
+#### **I - Interface Segregation (Segregación de Interfaces)**
+No has creado una interfaz gigantesca. Has separado las capacidades: `IEstudiar` para alumnos e `IDocente` para profesores.
+
+```csharp
+public sealed record Estudiante : Persona, IEstudiar { ... }
+public sealed record Docente : Persona, IDocente { ... }
+```
+
+#### **D - Dependency Inversion (Inversión de Dependencias)**
+El `Service` no depende de implementaciones concretas, sino de sus **Interfaces**. Esto permite cambiar el almacenamiento o añadir caché sin tocar la lógica de negocio.
+
+```csharp
+public class AcademiaService(
+    IPersonasRepository repository,
+    IValidador<Persona> valEstudiante,
+    IValidador<Persona> valDocente,
+    ICache<int, Persona> cache,
+    IBackupService backupService,
+    IReportService reportService
+) : IAcademiaService
+```
+
+---
+
+### 💧 Principio DRY (Don't Repeat Yourself)
+Has evitado la repetición de lógica mediante:
+
+1.  **Motor de Consultas Unificado:** Un único `GetAllOrderBy` con Dictionary de estrategias.
+2.  **Validación Polimórfica:** Un solo método `ValidarPersona` que selecciona el validador correcto según el tipo y retorna Result.
+
+```csharp
+// Un solo método maneja todos los tipos de Persona y retorna Result
+private Result<Persona, DomainError> ValidarPersona(Persona persona) {
+    return persona switch {
+        Estudiante => valEstudiante.Validar(persona),
+        Docente => valDocente.Validar(persona),
+        _ => Result.Failure<Persona, DomainError>(
+            PersonaErrors.Validation(new[] { "Tipo no soportado." }))
+    };
+}
+```
+
+---
+
+## 8. Caché LRU: Optimización de Lecturas
+El sistema implementa una caché **LRU (Least Recently Used)** para optimizar las lecturas por ID.
+
+### 8.1. ¿Qué es LRU?
+LRU significa "Least Recently Used" (Menos Recientemente Usado). Cuando la caché está llena y se necesita añadir un nuevo elemento, se elimina el que lleva más tiempo sin ser accedido.
+
+### 8.2. Estructura de la Caché
+
+```csharp
+public class LruCache<TKey, TValue> : ICache<TKey, TValue> where TKey : notnull {
+    private readonly Dictionary<TKey, TValue> _data = new();      // O(1) búsqueda
+    private readonly LinkedList<TKey> _usageOrder = new();       // Orden de uso
+    private readonly int _capacity;                               // Capacidad máxima
+
+    public LruCache(int capacity) {
+        if (capacity <= 0)
+            throw new ArgumentException("La capacidad debe ser mayor que 0.");
+        _capacity = capacity;
+    }
+}
+```
+
+**¿Por qué dos estructuras?**
+- `Dictionary`: Permite buscar cualquier elemento en O(1).
+- `LinkedList`: Mantiene el orden de uso. El primer nodo (`First`) es el menos usado; el último (`Last`) es el más reciente.
+
+### 8.3. Operaciones de la Caché
+
+```csharp
+// AÑADIR (Add)
+public void Add(TKey key, TValue value) {
+    if (_data.TryGetValue(key, out _)) {
+        RefreshUsage(key); // Ya existe, actualizar y mover al final
+        return;
+    }
+
+    if (_data.Count >= _capacity) {
+        // Caché llena: eliminar el menos usado (First de la lista)
+        var oldestKey = _usageOrder.First!.Value;
+        _usageOrder.RemoveFirst();
+        _data.Remove(oldestKey);
+    }
+
+    _data.Add(key, value);
+    _usageOrder.AddLast(key);
+}
+
+// OBTENER (Get)
+public TValue? Get(TKey key) {
+    if (!_data.TryGetValue(key, out var value)) return default;
+    RefreshUsage(key); // "Rejuvenecer" el elemento
+    return value;
+}
+
+// REFRESCAR USO (RefreshUsage)
+private void RefreshUsage(TKey key) {
+    _usageOrder.Remove(key);  // Sacar de donde esté
+    _usageOrder.AddLast(key); // Poner como el más reciente
+}
+```
+
+### 8.4. Patrón Look-Aside en el Servicio
+El Servicio implementa el patrón **Look-Aside** para la caché usando el patrón `is {}`:
+
+```csharp
+public Result<Persona, DomainError> GetById(int id) {
+    // PATRÓN is {} - Más moderno que != null
+    if (cache.Get(id) is {} cached)
+        return Result.Success<Persona, DomainError>(cached);  // HIT: está en caché
+
+    if (repository.GetById(id) is {} persona)
+    {
+        cache.Add(id, persona);  // MISS: añadir a caché
+        return Result.Success<Persona, DomainError>(persona);
+    }
+    
+    return Result.Failure<Persona, DomainError>(PersonaErrors.NotFound(id.ToString()));
+}
+```
+
+### 8.5. Estrategias de Caché en Operaciones CRUD
+
+| Operación    | Estrategia             | Código                                     |
+| ------------ | ---------------------- | ------------------------------------------ |
+| **Create**   | Añadir                 | `cache.Add(id, persona)`                   |
+| **Update**   | Invalidar              | `cache.Remove(id)`                         |
+| **Delete**   | Invalidar              | `cache.Remove(id)`                         |
+| **GetById**  | Look-Aside             | `cache.Get()` → repository → `cache.Add()` |
+| **GetByDni** | Añadir (tenemos el ID) | `cache.Add(persona.Id, persona)`           |
+
+**Nota pedagógica:** En producción, Create normalmente NO añade a caché (se repoblará en el primer GetById). Aquí lo hacemos para que veáis el funcionamiento.
+
+### 8.6. Complejidad Algorítmica
+
+| Operación      | Complejidad     |
+| -------------- | --------------- |
+| `Add`          | O(1) amortizado |
+| `Get`          | O(1)            |
+| `Remove`       | O(1)            |
+| `RefreshUsage` | O(1)            |
+
+---
+
+## 9. Sistema de Repositorios (Repository)
+El sistema implementa una **capa de datos** flexible que permite persistir los datos de diferentes maneras. A diferencia del Storage (que es para Import/Export), el Repository gestiona la persistencia principal del sistema entre ejecuciones.
+
+### 9.1. Interfaz Común: IPersonasRepository
+Todos los repositorios implementan una interfaz común que define el contrato CRUD:
+
+```csharp
+public interface IPersonasRepository : ICrudRepository<int, Persona> {
+    Persona? GetByDni(string dni);
+    bool ExisteDni(string dni);
+    bool DeleteAll();
+}
+```
+
+**Patrón Singleton:** Todos los repositorios usan `Lazy<T>` para garantizar una sola instancia en memoria.
+
+### 9.2. Tipos de Repositorio Disponibles
+El sistema ofrece **6 implementaciones diferentes** de repositorio:
+
+| Tipo | Clase | Persistencia | Biblioteca | Uso |
+|------|-------|--------------|------------|-----|
+| **Memory** | PersonasMemoryRepository | Dictionary en RAM | .NET | Desarrollo, testing |
+| **Binary** | PersonasBinaryRepository | Archivos binarios (.dat, .idx, .frag) | BinaryReader/Writer | Producción de alto rendimiento |
+| **Json** | PersonasJsonRepository | Archivo JSON | System.Text.Json | Producción simple |
+| **Dapper** | PersonasDapperRepository | SQLite | Dapper | Micro-ORM rápido |
+| **AdoNet** | PersonasAdoRepository | SQLite | ADO.NET puro | Acceso directo a BBDD |
+| **EfCore** | PersonasEfRepository | SQLite | Entity Framework Core | ORM completo |
+
+### 9.3. Patrón Entity + Mapper
+Todos los repositorios (excepto Memory) usan una tabla única `PersonaEntity` con un campo discriminador `Tipo` para almacenar tanto Estudiantes como Docentes:
+
+*   **PersonaEntity:** Una sola tabla con todos los campos.
+*   **PersonaMapper:** Convierte entre Entity y Model.
+*   **Discriminador:** El campo `Tipo` indica si es Estudiante o Docente.
+
+### 9.4. Sistema de Repositorios con DI
+
+El sistema de repositorios usa **DependenciesProvider** para registrar el repositorio según configuración:
+
+```csharp
+services.AddSingleton<IPersonasRepository>(sp => {
+    var repoType = AppConfig.RepositoryType.ToLower();
+    return repoType switch {
+        "memory" => new PersonasMemoryRepository(),
+        "binary" => new PersonasBinaryRepository(),
+        "json" => new PersonasJsonRepository(),
+        "dapper" => new PersonasDapperRepository(),
+        "adonet" => new PersonasAdoRepository(),
+        "efcore" => new PersonasEfRepository(),
+        _ => new PersonasMemoryRepository()
+    };
+});
+```
+
+**Ciclo de vida:** Singleton (para mantener estado en memoria o conexión a BD)
+
+### 9.5. Repositorio en Memoria (Memory)
+El repositorio más simple. Almacena todos los datos en un `Dictionary<int, Persona>` en memoria RAM.
+- **Ventaja:** Máxima velocidad de acceso O(1).
+- **Inconveniente:** Los datos se pierden al cerrar la aplicación.
+
+### 9.6. Repositorio Binario (Binary)
+Implementa un motor de base de datos simplificado con acceso aleatorio:
+- **Archivos:** `.dat` (datos), `.idx` (índices), `.frag` (fragmentación).
+- **Índices:** Mantiene diccionarios en memoria para búsquedas O(1).
+- **Gestión de Huecos:** Reutiliza espacio de registros eliminados (First Fit).
+- **Ventaja:** Persistencia duradera con alto rendimiento.
+
+### 9.7. Repositorio JSON (Json)
+Persiste los datos en un archivo JSON:
+- **Archivo:** `data/academia.json`
+- **Persistencia:** Guarda automáticamente tras cada operación (Create, Update, Delete).
+- **Ventaja:** Formato legible, fácil de depurar, estándar.
+
+### 9.8. Repositorio Dapper (Dapper)
+Accede a SQLite usando **Dapper**, un micro-ORM que combina la velocidad de ADO.NET con la comodidad del mapeo automático:
+- **Biblioteca:** Dapper
+- **Ventaja:** Muy rápido, SQL puro, poco código.
+- **Inconveniente:** Necesitas escribir SQL manualmente.
+- **Uso:** Ideal cuando necesitas control del SQL pero quieres minimizar código repetitivo.
+
+### 9.9. Repositorio ADO.NET (AdoNet)
+Accede a SQLite usando **ADO.NET puro** con `SqlConnection`, `SqlCommand`, etc.:
+- **Biblioteca:** System.Data.Sqlite
+- **Ventaja:** Control total, sin dependencias adicionales.
+- **Inconveniente:** Mucho código repetitivo (open, create command, execute, close).
+- **Uso:** Ideal para aprender cómo funciona el acceso a datos a bajo nivel.
+
+### 9.10. Repositorio Entity Framework Core (EfCore)
+Accede a SQLite usando **Entity Framework Core**, un ORM completo de Microsoft:
+- **Biblioteca:** Microsoft.EntityFrameworkCore
+- **Ventaja:** Abstracción total, migrations automáticas, LINQ to Entities.
+- **Inconveniente:** Más lento que Dapper/ADO.NET, curva de aprendizaje.
+- **Uso:** Ideal para aplicaciones donde la productividad es más importante que el rendimiento máximo.
+
+---
+
+## 10. Sistema de Almacenamiento (Storage)
+El sistema implementa una **capa de persistencia** flexible que permite almacenar y recuperar datos en múltiples formatos. Esta separación permite cambiar el formato de almacenamiento sin modificar la lógica de negocio.
+
+### 10.1. Interfaz Común: IStorage<T>
+Todos los storages implementan una interfaz común que define el contrato de persistencia:
+
+```csharp
+public interface IStorage<T> {
+    void Salvar(IEnumerable<T> items, string path);
+    IEnumerable<T> Cargar(string path);
+}
+```
+
+**Ventajas:**
+- **Desacoplamiento:** El servicio no conoce el formato concreto.
+- **Extensibilidad:** Añadir nuevos formatos sin modificar código existente.
+- **Testabilidad:** Se pueden crear storages mock para testing.
+
+### 10.2. Sistema de Storage con DI
+
+El sistema de storage usa **DependenciesProvider** para registrar el storage según configuración:
+
+```csharp
+services.AddTransient<IStorage<Persona>>(sp => {
+    var storageType = AppConfig.StorageType.ToLower();
+    return storageType switch {
+        "json" => new AcademiaJsonStorage(),
+        "xml" => new AcademiaXmlStorage(),
+        // ...
+    };
+});
+```
+
+**Ciclo de vida:** Transient (nueva instancia por operación)
+
+---
+
+### 10.3. Formatos de Almacenamiento
+
+| Formato     | Clase                 | Biblioteca          | Extensión | Ventajas                  |
+| ----------- | --------------------- | ------------------- | --------- | ------------------------- |
+| **JSON**    | AcademiaJsonStorage   | System.Text.Json    | .json     | Estándar moderno, legible |
+| **XML**     | AcademiaXmlStorage    | System.Xml          | .xml      | Jerárquico, validable     |
+| **CSV**     | AcademiaCsvStorage    | Manual              | .csv      | Universal, ligero         |
+| **CSV-Alt** | AcademiaCsvAltStorage | CsvHelper           | .csv      | Robusto, menos código     |
+| **Texto**   | AcademiaTextStorage   | Manual              | .txt      | Formato propietario       |
+| **Binario** | AcademiaBinStorage    | BinaryWriter/Reader | .bin      | Máximo rendimiento        |
+
+### 10.4. Serialización Binaria (.bin)
+El almacenamiento binario secuencial (usado para exportación/importación) implementa lectura/escritura campo a campo de toda la colección:
+
+```csharp
+// ESCRIBIR: Cabecera con count + registros
+writer.Write(dtos.Count);
+foreach (var dto in dtos) {
+    writer.Write(dto.Id);
+    writer.Write(dto.Dni);
+    // ... 13 campos por registro
+}
+
+// LEER: Leer count y luego ese número de registros
+var total = reader.ReadInt32();
+for (int i = 0; i < total; i++) {
+    var dto = new PersonaDto(...);
+}
+```
+
+**Ventajas:**
+- Tamaño mínimo (no hay texto, solo bytes)
+- Lectura/escritura muy rápida
+- Control total sobre el formato
+
+### 10.5. Motor de Persistencia Binaria Avanzado (Repository)
+A diferencia de la serialización secuencial, el motor binario del repositorio implementa una gestión de archivos de nivel profesional para permitir acceso aleatorio e integridad:
+*   **Separación de Responsabilidades:** Utiliza tres archivos: `.dat` (datos), `.idx` (índices en disco) y `.frag` (mapa de fragmentación).
+*   **Gestión de Huecos:** Implementa el algoritmo **First Fit** para reutilizar espacio de registros eliminados físicamente o reubicados.
+*   **Proceso de Vacuum:** Permite reescribir el almacén de forma contigua, eliminando toda la fragmentación física y los huecos muertos, pero garantizando la integridad de los registros en borrado lógico (historial).
+
+### 10.6. DTOs y Mapeo
+Para separar el modelo de dominio de la persistencia, se usan **DTOs** (Data Transfer Objects). ¿Por qué? Porque el modelo de dominio puede tener lógica, propiedades calculadas o referencias circulares que no son adecuadas para la serialización.
+
+```csharp
+public record PersonaDto(
+    int Id,
+    string Dni,
+    string Nombre,
+    // ... campos del modelo
+);
+```
+
+El `PersonaMapper` convierte:
+- **Modelo → DTO:** Para guardar (elimina lógica de negocio)
+- **DTO → Modelo:** Para cargar (rehidrata objetos)
+
+Usaremos `funciones de extensión` para mantener el código limpio:
+
+```csharp
+public static class PersonaMapper {
+    public static PersonaDto ToDto(this Persona persona) => new(
+        persona.Id,
+        persona.Dni,
+        persona.Nombre,
+        // ...
+    );
+    public static Persona ToModel(this PersonaDto dto) {
+        // Lógica para decidir si es Estudiante o Docente
+        if (dto.Curso != null) {
+            return new Estudiante(...);
+        } else {
+            return new Docente(...);
+        }
+    }
+}
+```
+
+### 10.7. Lazy Evaluation
+Los storages usan `IEnumerable` para evitar cargar todo en memoria. Esto es especialmente importante para formatos como CSV o Texto, donde el parsing es manual y con ello conseguimos eficiencia y escalabilidad.
+
+```csharp
+// En AcademiaJsonStorage
+return dtos?.Select(dto => dto.ToModel());
+
+// En AcademiaCsvStorage
+return File.ReadLines(path)
+    .Skip(1)
+    .Select(linea => Parsear(linea));
+```
+
+### 10.8. Configuración Dinámica
+El tipo de storage y repositorio se configuran en `appsettings.json`:
+
+```json
+{
+  "Storage": {
+    "Type": "Json"  // Cambiar a: Xml, Csv, Bin, Text
+  },
+  "Repository": {
+    "Type": "Memory",  // Tipos disponibles: Memory (RAM), Binary (ficheros binarios), Json (fichero JSON)
+    "Directory": "data"  // Directorio donde se guardan los datos del repositorio
+  },
+  "Backup": {
+    "Directory": "back",  // Directorio para los archivos ZIP de backup
+    "Format": "Json"  // Formato de los datos dentro del ZIP: Json, Xml, Csv, Bin, Text
+  },
+  "Academica": {
+    "NotaAprobado": 5.0
+  }
+}
+```
+
+**Descripción de secciones:**
+- **Storage**: Define el formato para operaciones de Import/Export (lectura/escritura de ficheos externos)
+- **Repository**: Define el tipo de persistencia del sistema (datos que persisten entre ejecuciones) y su directorio
+- **Backup**: Define el directorio y formato para las copias de seguridad ZIP
+- **Academica**: Configuración académica como la nota de aprobado
+
+La clase `Configuracion` deduce automáticamente la extensión del archivo.
+
+Para leer la configuración, se puede usar `IConfiguration` de .NET:
+
+```csharp
+// Nuevo enfoque con DI
+var serviceProvider = DependenciesProvider.BuildServiceProvider();
+var storage = serviceProvider.GetService<IStorage<Persona>>();
+```
+
+---
+
+## 10. Diagramas de Comportamiento
+Los diagramas de secuencia muestran el flujo de mensajes entre los componentes para las operaciones clave del sistema. Esto te ayuda a entender cómo se orquesta el código en tiempo de ejecución.
+
+### 10.1. Diagrama de Secuencia: Listar Todo el Personal (Operación READ ALL)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as Usuario
+    participant P as Program
+    participant S as Service
+    participant R as Repository
+    
+    U->>P: 1. Seleccionar opción Listar
+    activate P
+    P->>S: 2. GetAllOrderBy(criterio)
+    activate S
+    S->>R: 3. GetAll(page, size, EstadoRegistro)
+    activate R
+    R-->>S: 4. IEnumerable Personas (según filtro de estado)
+    deactivate R
+    S->>S: 5. Aplicar filtro adicional (linq)
+    activate S
+    S->>S: 6. OrderBy según estrategia
+    S-->>P: 7. List<Estudiante> (ordenada)
+    deactivate S
+    P-->>U: 8. Mostrar tabla
+    deactivate P
+```
+
+#### Trazabilidad de Código:
+*   **[1] Usuario:** Selecciona opción del menú
+*   **[2] Program:** `var lista = service.GetAllOrderBy(criterio);`
+*   **[3-4] Repository:** `repository.GetAll(page, size, estado)` → Filtro por estado (Todos/Activos/Historial) y paginación.
+*   **[5-6] Service:** Aplicar filtro y ordenación con diccionario de estrategias
+*   **[7-8] Program:** `ImprimirTablaPersonas(lista)`
+
+---
+
+### 10.2. Diagrama de Secuencia: Buscar por ID (Operación READ ONE con Caché)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant S as Service
+    participant C as Cache
+    participant R as Repository
+
+    P->>S: GetById(id)
+    S->>C: Cache.Get(id)
+    alt HIT (existe en cache)
+        C-->>S: persona
+        S-->>P: Result.Success(persona)
+    else MISS (no existe)
+        C-->>S: null
+        S->>R: GetById(id)
+        alt No existe
+            R-->>S: null
+            S-->>P: Result.Failure(NotFound)
+        else Existe
+            R-->>S: persona
+            S->>C: Add(id, persona)
+            C-->>S: ok
+            S-->>P: Result.Success(persona)
+        end
+    end
+```
+
+#### Trazabilidad de Código:
+*   **[1] Program:** `service.GetById(id).Match(...)`
+*   **[2] Service:** `cache.Get(id)` - Si existe (HIT) devuelve directamente
+*   **[3] Cache:** Si no existe (MISS) → `null`
+*   **[4] Repository:** `repository.GetById(id)`
+*   **[5-6] Repository:** Localiza la entidad mediante ID (O(1) en RAM o índices en Disco).
+*   **[7-8] Service:** Si no existe → `Result.Failure(PersonaErrors.NotFound(id))`
+*   **[9-10] Cache:** Si existe → `cache.Add(id, persona)` - Se añade tras lectura
+*   **[11] Program:** `.Match(onSuccess: p => Imprimir(p), onFailure: e => Error(e.Message))`
+
+---
+
+### 10.3. Diagrama de Secuencia: Crear Estudiante (Operación CREATE)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant S as Service
+    participant V as Validator
+    participant R as Repository
+
+    P->>S: Save(est)
+    S->>V: Validar(est)
+    alt Hay errores
+        V-->>S: Result.Failure(Validation)
+        S-->>P: Result.Failure(Validation)
+    else Datos válidos
+        S->>R: Create(est)
+        alt DNI ya existe (activo o historial)
+            R-->>S: null
+            S-->>P: Result.Failure(AlreadyExists)
+        else DNI es único
+            create participant E as est:Estudiante
+            R->>E: <<new>>(Id, CreatedAt, UpdatedAt)
+            R->>R: Persistir
+            R-->>S: persona
+            S-->>P: Result.Success(persona)
+        end
+    end
+```
+
+#### Trazabilidad de Código:
+*   **[1] Program:** `service.Save(estudiante).Match(...)`
+*   **[2] Service:** Llama al Validator
+*   **[3] Validator:** `valEstudiante.Validar(estudiante)` → `Result`
+*   **[4] Service:** Si hay errores → `Result.Failure(PersonaErrors.Validation(errores))`
+*   **[5] Service:** Si válido → `repository.Create(estudiante)`
+*   **[6-7] Repository:** Verifica unicidad del DNI en el almacén.
+*   **[8-10] Repository:** Crea la entidad con nuevo ID y metadatos.
+*   **[11] Service:** Devuelve `Result.Success(persona)`
+*   **[12] Program:** `.Match(onSuccess: p => Imprimir(p), onFailure: e => Error(e.Message))`
+
+---
+
+### 10.4. Diagrama de Secuencia: Actualizar Estudiante (Operación UPDATE)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant S as Service
+    participant V as Validator
+    participant R as Repository
+    participant C as Cache
+
+    P->>S: Update(id, est)
+    S->>V: Validar(est)
+    alt Hay errores
+        V-->>S: Result.Failure(Validation)
+        S-->>P: Result.Failure(Validation)
+    else Datos válidos
+        S->>R: Update(id, est)
+        alt No existe
+            R-->>S: null
+            S-->>P: Result.Failure(NotFound)
+        else Existe
+            create participant Est as estActualizado:Estudiante
+            R->>Est: <<new>>(CreatedAt original, UpdatedAt nuevo, IsDeleted nuevo)
+            R->>R: Persistir cambios e índices
+            R-->>S: estActualizado
+            S->>C: Remove(id)
+            C-->>S: ok
+            S-->>P: Result.Success(estActualizado)
+        end
+    end
+```
+
+#### Trazabilidad de Código:
+*   **[1] Program:** `service.Update(id, estudiante).Match(...)`
+*   **[2] Service:** Llama al Validator
+*   **[3] Validator:** `valEstudiante.Validar(estudiante)` → `Result`
+*   **[4] Service:** Si hay errores → `Result.Failure(PersonaErrors.Validation(errores))`
+*   **[5] Service:** Si válido → `repository.Update(id, estudiante)`
+*   **[6-7] Repository:** Busca la entidad por ID.
+*   **[8-10] Repository:** Genera la nueva versión del objeto.
+*   **[11] Service:** `cache.Remove(id)` - Invalida caché
+*   **[12] Service:** Devuelve `Result.Success(estudiante)`
+*   **[13] Program:** `ImprimirFichaPersona(actualizado)`
+
+---
+
+### 10.5. Diagrama de Secuencia: Eliminar Estudiante (Operación DELETE)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant S as Service
+    participant R as Repository
+    participant C as Cache
+
+    P->>S: Delete(id)
+    S->>R: Delete(id)
+    alt No existe
+        R-->>S: null
+        S-->>P: throw PersonasException.NotFound
+    else Existe
+        create participant EstEliminado as estEliminado:Estudiante
+        R->>EstEliminado: <<new>>(IsDeleted=true, UpdatedAt)
+        R->>R: Persistir cambio (mantiene DNI en historial)
+        R-->>S: estEliminado
+        S->>C: Remove(id)
+        C-->>S: ok
+        S-->>P: estEliminado
+    end
+```
+
+#### Trazabilidad de Código:
+*   **[1] Program:** `var eliminado = service.Delete(id);`
+*   **[2] Service:** `repository.Delete(id)`
+*   **[3-4] Repository:** Busca y valida la existencia del ID. Si no existe → lanza error.
+*   **[5-7] Repository:** Marca el registro como `IsDeleted = true`. IMPORTANTE: El DNI permanece en el almacén para detectar futuros conflictos de alta.
+*   **[8] Service:** `cache.Remove(id)` - Invalida caché
+*   **[9] Service:** Devuelve `estEliminado`
+*   **[10] Program:** `ImprimirFichaPersona(eliminado)`
+
+
+### 10.6. Diagrama de Secuencia: Generar Informe de Rendimiento de Estudiantes (READ con Agregación)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Usuario
+    participant P as Program
+    participant S as Service
+    participant R as Repository
+    
+    U->>P: 1. Seleccionar "Informe Rendimiento"
+    activate P
+    P->>P: 2. Mostrar opciones de alcance
+    U->>P: 3. Elegir alcance (1-4)
+    alt Alcance = Global
+        P->>P: fCiclo = null, fCurso = null
+    else Alcance = Por Ciclo
+        P->>P: fCiclo = LeerCiclo(), fCurso = null
+    else Alcance = Por Curso
+        P->>P: fCiclo = null, fCurso = LeerCurso()
+    else Alcance = Clase Específica
+        P->>P: fCiclo = LeerCiclo(), fCurso = LeerCurso()
+    end
+    P->>S: 4. GenerarInformeEstudiante(fCiclo, fCurso)
+    activate S
+    S->>S: 5. GetEstudiantesOrderBy(Nota)
+    activate S
+    S->>R: 6. GetAll()
+    activate R
+    R-->>S: 7. IEnumerable~Estudiante~
+    deactivate R
+    S->>S: 8. Where(solo activos && ciclo && curso)
+    S->>S: 9. ToList() (materializar)
+    S->>S: 10. Calcular métricas:
+        Note over S: Total = count
+        Note over S: Aprobados = count(nota >= 5)
+        Note over S: Suspensos = count(nota < 5)
+        Note over S: NotaMedia = average(nota)
+    S-->>P: 11. InformeEstudiante
+    deactivate S
+    P->>P: 12. Formatear salida
+    P-->>U: 13. Mostrar métricas y ranking
+    deactivate P
+```
+
+#### Trazabilidad de Código:
+*   **[1] Usuario:** Selecciona opción 8 del menú (`OpcionMenu.InformeEstudiantes`)
+*   **[2-3] Program:** `MostrarInformeEstudiantes(service)` - Solicita alcance
+*   **[4] Program:** `service.GenerarInformeEstudiante(fCiclo, fCurso)` - Pasa filtros
+*   **[5-6] Service:** `GetEstudiantesOrderBy(TipoOrdenamiento.Nota)` - Obtiene del repositorio
+*   **[7] Repository:** `repository.GetAll()` - Devuelve todos los estudiantes
+*   **[8] Service:** `.Where(e => !e.IsDeleted && (ciclo == null || e.Ciclo == ciclo) && ...)` - Filtra solo activos y aplica alcances nulos
+*   **[9] Service:** `.ToList()` - Materializa para contar varias veces (LINQ deferred execution)
+*   **[10] Service:** Calcula:
+    *   `TotalEstudiantes = count`
+    *   `Aprobados = count(e => e.Calificacion >= 5.0)`
+    *   `Suspensos = count(e => e.Calificacion < 5.0)`
+    *   `NotaMedia = average(e => e.Calificacion)`
+*   **[11] Service:** Devuelve `InformeEstudiante` con PorNota, Total, Aprobados, Suspensos, NotaMedia
+*   **[12-13] Program:** Formatea y muestra tabla con métricas y ranking por nota
+
+#### Punto Clave: Pipeline Funcional con LINQ
+El método `GenerarInformeEstudiante` encadena operaciones en una sola expresión fluida:
+
+```csharp
+var estudiantes = GetEstudiantesOrderBy(TipoOrdenamiento.Nota)  // Obtener
+    .Where(e => !e.IsDeleted)                                    // Solo Activos
+    .Where(e => (ciclo == null || e.Ciclo == ciclo) && ...)       // Filtrar Alcance
+    .ToList();                                                     // Materializar
+
+return new InformeEstudiante {
+    PorNota = estudiantes,
+    TotalEstudiantes = estudiantes.Count,
+    Aprobados = estudiantes.Count(e => e.Calificacion >= 5.0),
+    Suspensos = estudiantes.Count(e => e.Calificacion < 5.0),
+    NotaMedia = estudiantes.Average(e => e.Calificacion)
+};
+```
+
+**Nota sobre `.ToList()`:** Se materializa el IEnumerable en lista para poder:
+1. Contar múltiples veces (Aprobados, Suspensos, Total)
+2. Calcular la media sin iterar de nuevo
+3. Evitar evaluación diferida (deferred execution) en las estadísticas
+
+---
+
+### 10.7. Diagrama de Secuencia: Exportar Datos (Operación EXPORT)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant S as Service
+    participant R as Repository
+    participant St as IStorage~Persona~
+    
+    P->>S: 1. ExportarDatos()
+    activate S
+    S->>R: 2. GetAll()
+    activate R
+    R-->>S: 3. IEnumerable~Persona~
+    deactivate R
+    S->>St: 4. Salvar(personas, path)
+    activate St
+    St-->>S: 5. void
+    deactivate St
+    S->>S: 6. Count()
+    S-->>P: 7. count
+    deactivate S
+```
+
+#### Trazabilidad de Código:
+*   **[1] Program:** `service.ExportarDatos()`
+*   **[2-3] Repository:** `repository.GetAll()` → devuelve IEnumerable de personas
+*   **[4-5] Storage:** `storage.Salvar(personas, path)` → guarda en el formato configurado
+*   **[6] Service:** `personas.Count()` → obtiene el total de registros exportados
+*   **[7] Program:** Devuelve el número de registros al usuario
+
+---
+
+### 10.8. Diagrama de Secuencia: Importar Datos (Operación IMPORT)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as Program
+    participant S as Service
+    participant R as Repository
+    participant St as IStorage~Persona~
+    
+    P->>S: 1. ImportarDatos()
+    activate S
+    S->>St: 2. Cargar(path)
+    activate St
+    St-->>S: 3. IEnumerable~Persona~
+    deactivate St
+    S->>R: 4. DeleteAll()
+    activate R
+    R-->>S: 5. void
+    deactivate R
+    S->>S: 6. foreach persona in personas
+    loop Save() x cada persona
+        S->>S: 7. Validar(persona)
+        activate S
+        S->>R: 8. Create(persona)
+        activate R
+        R-->>S: 9. Persona creada
+        deactivate R
+        deactivate S
+    end
+    S-->>P: 10. count
+    deactivate S
+```
+
+#### Trazabilidad de Código:
+*   **[1] Program:** `service.ImportarDatos()`
+*   **[2-3] Storage:** `storage.Cargar(path)` → lee del formato configurado
+*   **[4-5] Repository:** `repository.DeleteAll()` → elimina todos los datos existentes
+*   **[6-9] Service:** `foreach` que itera sobre cada persona:
+    *   **[7] Service:** `ValidarPersonaConLogicaPolimorfica(persona)` → valida según tipo
+    *   **[8-9] Repository:** `repository.Create(persona)` → crea el registro
+*   **[10] Program:** Devuelve el número de registros importados
+
+---
+
+### 10.9. Diagrama de Secuencia: Realizar Backup (Operación BACKUP)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Usuario
+    participant P as Program
+    participant S as Service
+    participant BS as BackupService
+    participant R as Repository
+    participant St as IStorage~Persona~
+    
+    U->>P: 1. Seleccionar "Realizar Backup"
+    activate P
+    P->>S: 2. RealizarBackup()
+    activate S
+    S->>R: 3. GetAll()
+    activate R
+    R-->>S: 4. IEnumerable~Persona~
+    deactivate R
+    S->>BS: 5. RealizarBackup(personas)
+    activate BS
+    BS->>St: 6. Salvar(personas, temp/data.json)
+    activate St
+    St-->>BS: 7. void
+    deactivate St
+    BS->>BS: 8. Comprimir temp → ZIP
+    activate BS
+    BS-->>S: 9. rutaZIP
+    deactivate BS
+    S-->>P: 10. rutaZIP
+    deactivate S
+    P-->>U: 11. Mostrar "Backup creado: {ruta}"
+    deactivate P
+```
+
+#### Trazabilidad de Código:
+*   **[1] Usuario:** Selecciona opción 16 del menú (`OpcionMenu.RealizarBackup`)
+*   **[2] Program:** `service.RealizarBackup()`
+*   **[3-4] Repository:** `repository.GetAll()` → obtiene todas las personas
+*   **[5] Service:** `backupService.RealizarBackup(personas)` → pasa los datos al servicio de backup
+*   **[6-7] Storage:** `storage.Salvar(personas, tempPath)` → serializa a JSON/XML/etc en directorio temporal
+*   **[8] BackupService:** `ZipFile.CreateFromDirectory()` → comprime a ZIP
+*   **[9-10] Service:** Devuelve la ruta del archivo ZIP creado
+*   **[11] Program:** Muestra mensaje de éxito con la ruta
+
+**Punto Clave:** El servicio de backup y report están inyectados en AcademiaService, lo que permite cambiar su implementación sin modificar la lógica de negocio.
+
+---
+
+### 10.10. Diagrama de Secuencia: Restaurar Backup (Operación RESTORE)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as Usuario
+    participant P as Program
+    participant S as Service
+    participant BS as BackupService
+    participant R as Repository
+    participant St as IStorage~Persona~
+    
+    U->>P: 1. Seleccionar "Restaurar Backup"
+    activate P
+    P->>S: 2. ListarBackups()
+    activate S
+    S->>BS: 3. ListarBackups()
+    activate BS
+    BS-->>S: 4. IEnumerable~string~ (rutas ZIP)
+    deactivate BS
+    S-->>P: 5. IEnumerable~string~
+    deactivate S
+    P-->>U: 6. Mostrar lista de backups
+    U->>P: 7. Seleccionar backup (número)
+    P->>S: 8. RestaurarBackup(rutaZIP)
+    activate S
+    S->>BS: 9. RestaurarBackup(rutaZIP)
+    activate BS
+    BS->>BS: 10. Extraer ZIP a temp
+    activate BS
+    BS->>St: 11. Cargar(temp/data.json)
+    activate St
+    St-->>BS: 12. IEnumerable~Persona~
+    deactivate St
+    BS-->>S: 13. IEnumerable~Persona~
+    deactivate BS
+    S->>R: 14. DeleteAll()
+    activate R
+    R-->>S: 15. void
+    deactivate R
+    S->>S: 16. foreach persona in personas
+    loop Save() x cada persona
+        S->>S: 17. Validar(persona)
+        activate S
+        S->>R: 18. Create(persona)
+        activate R
+        R-->>S: 19. Persona creada
+        deactivate R
+        deactivate S
+    end
+    S-->>P: 20. count
+    deactivate S
+    P-->>U: 21. Mostrar "Restaurados: {count} registros"
+    deactivate P
+```
+
+#### Trazabilidad de Código:
+*   **[1] Usuario:** Selecciona opción 17 del menú (`OpcionMenu.RestaurarBackup`)
+*   **[2-5] Program:** `service.ListarBackups()` → obtiene lista de archivos ZIP disponibles
+*   **[6-7] Program:** Muestra la lista y el usuario selecciona uno
+*   **[8] Program:** `service.RestaurarBackup(rutaZip)` → pasa la ruta al servicio
+*   **[9-13] BackupService:** 
+    *   Extrae el ZIP a un directorio temporal
+    *   Carga los datos con `storage.Cargar()`
+*   **[14-15] Repository:** `repository.DeleteAll()` → elimina todos los datos actuales
+*   **[16-19] Service:** `foreach` que itera sobre cada persona restaurada:
+    *   Valida la persona según su tipo
+    *   Crea el registro en el repositorio
+*   **[20-21] Program:** Muestra el número de registros restaurados
+
+**Punto Clave:** La restauración primero limpia el repositorio y luego reinserta todos los datos, manteniendo la lógica de validación del servicio.
+
+---
+
+### 10.11. Diagrama de Actividad: Actualizar Estudiante (UPDATE)
+
+```mermaid
+flowchart TD
+    A([Inicio]) --> B["Introducir DNI"]
+    B --> C{¿DNI válido?}
+    C -->|No| D["Mostrar error"]
+    D --> B
+    C -->|Sí| E["service.GetByDni(dni)"]
+    E --> F{¿Existe?}
+    F -->|No| G["Mostrar: No encontrado"]
+    G --> H([Fin])
+    F -->|Sí| I["Mostrar datos actuales"]
+    I --> J["Introducir nuevo nombre\n(Enter = mantener)"]
+    J --> K["Introducir nuevos apellidos\n(Enter = mantener)"]
+    K --> L{¿Cambiar nota?}
+    L -->|Sí| M["Leer nota validada"]
+    L -->|No| N["Mantener nota actual"]
+    M --> O{¿Cambiar ciclo?}
+    N --> O
+    O -->|Sí| P["Leer ciclo"]
+    O -->|No| Q["Mantener ciclo actual"]
+    P --> R{¿Cambiar curso?}
+    Q --> R
+    R -->|Sí| S["Leer curso"]
+    R -->|No| T["Mantener curso actual"]
+    S --> U["¿Cambiar Estado?\n(Activo/Baja)"]
+    T --> U
+    U --> V["Construir estudiante\ncon 'with'"]
+    V --> W["Mostrar Vista Previa\n(datos nuevos)"]
+    W --> X{¿Confirmar?}
+    X -->|No| Y["Cancelar operación"]
+    Y --> H
+    X -->|Sí| Z["service.Update(id, est)"]
+    Z --> AA{¿Validación OK?}
+    AA -->|No| AB["Mostrar errores"]
+    AB --> W
+    AA -->|Sí| AC["Repository.Update\n+ Invalidar caché"]
+    AC --> AD["Mostrar éxito\n+ datos actualizados"]
+    AD --> H
+```
+
+#### Trazabilidad de Código:
+*   **[A-H] Validación DNI:** `ValidarDniCompleto(d)` - Validación con algoritmo real
+*   **[E-F] Búsqueda:** `service.GetByDni(dni)` → `Result.Failure(NotFound)` si no existe
+*   **[I] Mostrar actual:** `ImprimirFichaPersona(est)` - Muestra datos antes de modificar
+*   **[J-T] Entrada modular:** Cada campo se pide individualmente con opción de mantener
+*   **[U] Constructor with:** `est with { Nombre = ..., Calificacion = ... }` - Inmutabilidad
+*   **[V] Preview:** `ImprimirFichaPersona(act)` - Revisión antes de confirmar
+*   **[Y] Update:** `service.Update(est.Id, act)` - Lógica de negocio + validación
+*   **[Z] Validación:** `valEstudiante.Validar(estudiante)` → `Result`
+*   **[AB] Persistencia:** `repository.Update()` + `cache.Remove(id)` - Caché LRU
+
+---
+
+### 10.12. Diagrama de Estado: Ciclo de Vida del Estudiante
+
+```mermaid
+stateDiagram-v2
+    [*] --> Nuevo: Save()
+    Nuevo --> Activo: Validación OK
+    Nuevo --> Cancelado: Validación Fallida
+    
+    state Activo {
+        [*] --> DatosCompletos
+        DatosCompletos --> Modificando: Update()
+        Modificando --> DatosCompletos: Update OK
+    }
+    
+    Activo --> Eliminado: Delete()
+    Eliminado --> Activo: Update() (Reactivación)
+    Eliminado --> [*]
+    
+    note right of Nuevo
+        El estudiante se crea
+        pero no se persiste
+        hasta validar
+    end note
+    
+    note right of Activo
+        Estado operativo.
+        Puede consultar, 
+        actualizar o eliminar.
+    end note
+    
+    note right of Eliminado
+        IsDeleted = true
+        Visible en listados (❌)
+    end note
+```
+
+#### Estados del Estudiante:
+
+| Estado          | Descripción                                 | Transiciones                             |
+| --------------- | ------------------------------------------- | ---------------------------------------- |
+| **Nuevo**       | Estudiante creado en memoria, sin persistir | → Activo (validado), → Cancelado (error) |
+| **Activo**      | Estudiante persistido y operativo           | → Modificando, → Eliminado               |
+| **Modificando** | Transición temporal durante Update          | → Activo                                 |
+| **Eliminado**   | Marcado como borrado (IsDeleted=true)       | → Activo (Reactivación), → Fin           |
+
+#### Transiciones y Eventos:
+
+| Evento          | De Estado   | A Estado    | Acción asociada                        |
+| --------------- | ----------- | ----------- | -------------------------------------- |
+| `Save()`        | -           | Nuevo       | Crear instancia con ID temporal        |
+| Validación OK   | Nuevo       | Activo      | `repository.Create()` + caché          |
+| Validación FAIL | Nuevo       | Cancelado   | `Result.Failure(Validation)`          |
+| `Update()`      | Activo      | Modificando | Reemplazar datos                       |
+| Update OK       | Modificando | Activo      | `repository.Update()` + caché.Remove() |
+| `Delete()`      | Activo      | Eliminado   | `IsDeleted = true` + caché.Remove()    |
+| `Update()`      | Eliminado   | Activo      | Reactivación (IsDeleted = false)       |
+
+#### Implementación en Código (con Result):
+
+```csharp
+// Save - Transición Nuevo → Activo
+public Result<Persona, DomainError> Save(Persona persona) {
+    return ValidarPersona(persona)              // ¿Validación OK?
+        .Map(p => repository.Create(p)!);        // → Activo
+}
+
+// Update - Transición Activo/Eliminado → Modificando → Activo  
+public Result<Persona, DomainError> Update(int id, Persona persona) {
+    return CheckExists(id)                      // ¿Existe?
+        .Bind(_ => ValidarPersona(persona))     // ¿Validación OK?
+        .Map(p => {
+            cache.Remove(id);
+            return repository.Update(id, p)!;   // → Activo (nuevos datos)
+        });
+}
+
+// Delete - Transición Activo → Eliminado
+public Persona Delete(int id) {
+    var eliminada = repository.Delete(id) ?? throw new PersonasException.NotFound(id.ToString()); // IsDeleted = true
+    cache.Remove(id);
+    return eliminada;
+}
+```
+
+---
+
+## 11. Patrones de Diseño y DI
+
+Este proyecto implementa **Inyección de Dependencias** como patrón central, aprovechando `Microsoft.Extensions.DependencyInjection` para gestionar el ciclo de vida de todos los componentes.
+
+### 📦 11.1. Repository Pattern + DI
+
+**Problema:** Necesitamos abstraer la persistencia para que la lógica de negocio no dependa de cómo se almacenan los datos.
+
+```csharp
+public interface IPersonasRepository {
+    Persona? GetById(int id);
+    Persona? GetByDni(string dni);
+    IEnumerable<Persona> GetAll();
+    Persona? Create(Persona entity);
+    Persona? Update(int id, Persona entity);
+    Persona? Delete(int id);
+}
+```
+
+**Con DI:** El repositorio se registra como Singleton y se inyecta en el servicio:
+
+```csharp
+services.AddSingleton<IPersonasRepository>(sp => {
+    var repoType = AppConfig.RepositoryType.ToLower();
+    return repoType switch {
+        "memory" => new PersonasMemoryRepository(),
+        "binary" => new PersonasBinaryRepository(),
+        "json" => new PersonasJsonRepository(),
+        "dapper" => new PersonasDapperRepository(),
+        "adonet" => new PersonasAdoRepository(),
+        "efcore" => new PersonasEfRepository(),
+        _ => new PersonasMemoryRepository()
+    };
+});
+```
+
+---
+
+### 🗺️ 11.2. Strategy Pattern
+
+**Problema:** Aplicar diferentes algoritmos de ordenación sin múltiples `if/else`.
+
+```csharp
+var comparadores = new Dictionary<TipoOrdenamiento, Func<IOrderedEnumerable<Persona>>> {
+    { TipoOrdenamiento.Id, () => lista.OrderBy(p => p.Id) },
+    { TipoOrdenamiento.Nota, () => lista.OrderByDescending(p => 
+        p is Estudiante e ? e.Calificacion : -1) },
+};
+
+return comparadores.TryGetValue(orden, out var comparador)
+    ? comparador()
+    : lista.OrderBy(p => p.Id);
+```
+
+---
+
+### ⚡ 11.3. LRU Cache (Least Recently Used)
+
+**Problema:** Las búsquedas repetidas por ID son costosas.
+
+```csharp
+private readonly Dictionary<TKey, TValue> _data = new();
+private readonly LinkedList<TKey> _usageOrder = new();
+
+public void Add(TKey key, TValue value) {
+    if (_data.TryGetValue(key, out _)) { RefreshUsage(key); return; }
+    if (_data.Count >= _capacity) {
+        var oldest = _usageOrder.First!.Value;
+        _usageOrder.RemoveFirst();
+        _data.Remove(oldest);
+    }
+    _data.Add(key, value);
+    _usageOrder.AddLast(key);
+}
+```
+
+| Operación | Complejidad |
+| --------- | ----------- |
+| Add/Get   | O(1)        |
+
+**Patrón Look-Aside:**
+```csharp
+var cached = cache.Get(id);
+if (cached != null) return cached;        // HIT
+var persona = repository.GetById(id);       // MISS
+cache.Add(id, persona);
+return persona;
+```
+
+---
+
+### 🔄 11.4. Dependency Injection con DependenciesProvider
+
+**Problema:** Necesitamos unificar la creación de todos los servicios (repositorios, storages, validadores, caché) sin hardcodear dependencias en cada clase.
+
+**Solución:** Una clase estática `DependenciesProvider` configura todo el contenedor DI:
+
+```csharp
+public static class DependenciesProvider
+{
+    public static IServiceProvider BuildServiceProvider()
+    {
+        var services = new ServiceCollection();
+        
+        RegisterStorages(services);      // Transient: nueva instancia por uso
+        RegisterRepositories(services);   // Singleton: mantiene estado
+        RegisterServices(services);       // Scoped/Transient según necesidad
+        
+        return services.BuildServiceProvider();
+    }
+
+    private static void RegisterRepositories(IServiceCollection services)
+    {
+        services.AddSingleton<IPersonasRepository>(sp => {
+            var repoType = AppConfig.RepositoryType.ToLower();
+            return repoType switch {
+                "memory" => new PersonasMemoryRepository(),
+                "binary" => new PersonasBinaryRepository(),
+                "json" => new PersonasJsonRepository(),
+                "dapper" => new PersonasDapperRepository(),
+                "adonet" => new PersonasAdoRepository(),
+                "efcore" => new PersonasEfRepository(),
+                _ => new PersonasMemoryRepository()
+            };
+        });
+    }
+
+    private static void RegisterServices(IServiceCollection services)
+    {
+        services.AddSingleton<ICache<int, Persona>>(sp => 
+            new LruCache<int, Persona>(AppConfig.CacheSize));
+
+        services.AddTransient<IValidador<Persona>, ValidadorEstudiante>();
+        services.AddTransient<IValidador<Persona>, ValidadorDocente>();
+
+        services.AddTransient<IBackupService, BackupService>();
+        services.AddTransient<IReportService, ReportService>();
+        
+        services.AddScoped<IAcademiaService, AcademiaService>();
+    }
+
+    private static void RegisterStorages(IServiceCollection services)
+    {
+        services.AddTransient<IStorage<Persona>>(sp => {
+            var storageType = AppConfig.StorageType.ToLower();
+            return storageType switch {
+                "json" => new AcademiaJsonStorage(),
+                "xml" => new AcademiaXmlStorage(),
+                "csv" => new AcademiaCsvStorage(),
+                "csv-alt" => new AcademiaCsvAltStorage(),
+                "txt" or "text" => new AcademiaTextStorage(),
+                "bin" or "binary" => new AcademiaBinStorage(),
+                _ => new AcademiaJsonStorage()
+            };
+        });
+    }
+}
+```
+
+### Ciclo de Vida en el Contenedor
+
+| Servicio | Tipo | Razón |
+|----------|------|-------|
+| `IPersonasRepository` | **Singleton** | Mantiene estado en memoria o conexión a BD |
+| `ICache<int, Persona>` | **Singleton** | Caché compartida entre todas las peticiones |
+| `IStorage<Persona>` | **Transient** | Nueva instancia por operación import/export |
+| `IValidador<Persona>` | **Transient** | Sin estado, nuevo por validación |
+| `IBackupService` | **Transient** | Sin estado, nuevo por operación |
+| `IReportService` | **Transient** | Sin estado, nuevo por informe |
+| `IAcademiaService` | **Scoped** | Una instancia por scope/request |
+
+### Uso en Program.cs
+
+```csharp
+void Main() {
+    var serviceProvider = DependenciesProvider.BuildServiceProvider();
+    
+    using var scope = serviceProvider.CreateScope();
+    var service = scope.ServiceProvider.GetRequiredService<IAcademiaService>();
+    
+    // El servicio ya tiene todas sus dependencias inyectadas
+    var personas = service.GetAll();
+}
+```
+
+### Ventajas del enfoque DI
+
+1. **Desacoplamiento:** Las clases no crean sus dependencias, las reciben
+2. **Testabilidad:** Fácil reemplazar implementaciones con mocks
+3. **Ciclo de vida controlado:** Singleton, Scoped, Transient gestionados por el contenedor
+4. **Configuración centralizada:** Todo en un solo lugar
+5. **Sin singletons manuales:** Se acabaron los `.Instance` y `Lazy<T>`
+
+
+---
+
+## 12 Lo que has aprendido en este proyecto: Pilares de Ingeniería
+
+Completar este sistema te ha permitido trabajar con decisiones de diseño que reflejan cómo se construye el software de alta calidad en la industria.
+
+### 1. Abstracción de la Estructura de Datos
+Has aprendido a separar la lógica de almacenamiento de la lógica de negocio. El `Dictionary` te ha enseñado la diferencia entre **O(n)** (búsqueda secuencial) y **O(1)** (búsqueda por clave).
+
+### 2. Patrón Strategy con Dictionary
+Has aprendido a centralizar lógica de ordenación en un diccionario, haciendo el código más mantenible y extensible.
+
+### 3. Caché LRU
+Has implementado un algoritmo clásico de optimización de lecturas, entendiendo:
+- Patrón Look-Aside
+- Trade-off entre memoria y velocidad
+- Invalidación de caché
+
+### 4. Dependency Injection con DependenciesProvider
+Has comprendido por qué el Servicio no fabrica sus propias dependencias, sino que las recibe desde fuera.
+*   **Contenedor DI:** Uso de `Microsoft.Extensions.DependencyInjection` para gestionar el ciclo de vida de los servicios.
+*   **DependenciesProvider:** Clase estática que centraliza el registro de todos los servicios.
+*   **Ciclo de vida:** Singleton (repositorios, caché), Scoped (servicios principales), Transient (operaciones por uso).
+*   **Sin patrones Factory:** Eliminación de `RepositoryFactory` y `StorageFactory`, todo configurado en un solo lugar.
+
+### 5. Validación de Dominio
+Has aprendido a separar las reglas de negocio (DNI válido, nota 0-10) del resto de la aplicación.
+
+### 6. Patrón Result y Errores de Dominio
+Has aprendido una alternativa moderna a las excepciones: el **Patrón Result** con la librería `CSharpFunctionalExtensions`.
+*   **Errores tipados:** En lugar de excepciones genéricas, usamos `DomainError` con tipos específicos (`NotFound`, `Validation`, `AlreadyExists`).
+*   **Flujo funcional:** Métodos como `Bind`, `Map`, `Match` permiten encadenar operaciones de forma segura.
+*   **No todo necesita Result:** Solo las operaciones que pueden fallar por razones de negocio (GetById, Save, Update, Delete). Las lecturas simples (GetAll, Informes) devuelven directamente el valor.
+
+### 7. Inmutabilidad con Records
+Has aprendido a usar `record` en C# para crear objetos inmutables con métodos automáticos como `Equals()`, `GetHashCode()` y la posibilidad de usar `with` para crear copias con cambios.
+
+### 8. Programación Funcional con LINQ
+Has descubierto el poder de la programación funcional mediante LINQ: expresiones lambda, evaluación diferida (deferred execution), métodos de extensión como `Where`, `OrderBy`, `Select`, `Average`, etc.
+
+### 9. Interfaces y Polimorfismo
+Has aplicado programación orientada a objetos con interfaces (`IPersonasRepository`, `ICache`, `IValidador`) para desacoplar componentes y permitir distintas implementaciones.
+
+### 10. Clean Code y Nomenclatura
+Has practicado naming profesional: nombres descriptivos (`GetEstudiantesOrderBy`), comentarios XML (`<summary>`), y organización del código en capas.
+
+### 11. Sistema de Storage y Persistencia
+Has aprendido a implementar una **capa de persistencia flexible** mediante una interfaz común `IStorage<T>` que abstrae el formato de archivo, con múltiples implementaciones (JSON, XML, CSV, Binario, Texto) y **Dependency Injection** para crear el storage correcto según configuración.
+
+### 12. Serialización Binaria
+Has aprendido a trabajar con **BinaryWriter/BinaryReader** para crear archivos binarios campo a campo, escribiendo una cabecera con el count de registros para saber cuántos leer.
+
+### 13. DTOs y Mapper
+Has aprendido a separar el **modelo de dominio** de la **persistencia** usando DTOs (Data Transfer Objects) y Mappers que convierten Modelo → DTO al guardar y DTO → Modelo al cargar, manteniendo el storage independiente de la lógica de negocio.
+
+### 14. Evaluación Perezosa (Lazy Evaluation)
+Has descubierto la diferencia entre `IEnumerable` (evaluación perezosa que no carga todo en memoria) y `.ToList()` (evaluación inmediata que materializa todo), entendiendo el trade-off entre memoria y flexibilidad.
+
+### 15. Configuración Externa con appsettings.json
+Has aprendido a externalizar la configuración usando el fichier `appsettings.json` y la biblioteca `IConfiguration` de .NET, permitiendo cambiar el tipo de storage sin recompilar el código (inversión de control).
+
+### 16. Mantenimiento de Bases de Datos (Vacuum)
+Has comprendido la necesidad de compactar los archivos físicos para eliminar la fragmentación externa e interna, aprendiendo a realizar una migración atómica de datos a un archivo temporal para optimizar el espacio sin perder información.
+
+### 17. Gestión del Ciclo de Vida y Borrado Lógico
+Has implementado un sistema de historial donde los datos no se destruyen, sino que cambian de estado. Esto te ha permitido entender la importancia de la integridad referencial y la trazabilidad de los datos en aplicaciones empresariales.
+
+### 18. Paginación y Filtrado en Capa de Datos
+Has aprendido a mover la lógica de filtrado y segmentación de datos (Skip/Take) desde el servicio hacia el repositorio, lo cual es vital para construir aplicaciones escalables que manejen millones de registros sin colapsar la memoria RAM.
+
+### 19. Sistema de Repositorios con DI
+Has aprendido a implementar repositorios con **inyección de dependencias**, eliminando patrones Factory manuales. Ahora `DependenciesProvider` registra los repositorios según configuración externa (`appsettings.json`), permitiendo cambiar entre diferentes implementaciones (Memory, Binary, Json, Dapper, ADO.NET, EF Core) sin recompilar el código ni modificar la lógica de negocio.
+
+### 20. Sistema de Backups
+Has implementado un sistema de copias de seguridad que extrae datos del repositorio, los comprime en ZIP y permite restaurarlos, usando errores de dominio con Result para manejar fallos.
+
+### 21. Múltiples Formas de Acceso a Bases de Datos
+Has aprendido que existen diferentes formas de acceder a una base de datos SQLite, cada una con sus ventajas:
+
+| Enfoque | Biblioteca | Ventajas | Inconvenientes |
+|---------|------------|----------|----------------|
+| **Dapper** | Dapper | Muy rápido, SQL puro, poco código | Necesitas escribir SQL |
+| **ADO.NET** | System.Data.Sqlite | Control total, sin dependencias | Mucho código repetitivo |
+| **EF Core** | Microsoft.EntityFrameworkCore | Abstracción total, migrations | Más lento, curva de aprendizaje |
+
+### 22. Entity + Mapper Pattern
+Has aprendido un patrón común en aplicaciones profesionales:
+*   **Una sola tabla** en la base de datos (`PersonaEntity`) con todos los campos.
+*   **Campo discriminador** (`Tipo`) para saber si es Estudiante o Docente.
+*   **Mapper** convierte Entity ↔ Model según el tipo.
+*   Esto simplifica las consultas y mantiene la base de datos simple.
+
+### 23. Programación Funcional con CSharpFunctionalExtensions
+Has descubierto cómo escribir código más robusto usando programación funcional:
+*   **Maybe:** Para valores opcionales que pueden ser null.
+*   **Result:** Para operaciones que pueden fallar sin excepciones.
+*   **Bind/Map:** Para encadenar operaciones de forma segura.
+*   **Match:** Para manejar el resultado de forma clara.
+
+### 24. Pattern Matching Moderno con `is {}`
+Has aprendido la sintaxis moderna de C# para evitar null checks tradicionales:
+
+| Antigua sintaxis | Nueva sintaxis | Ventaja |
+|----------------|----------------|---------|
+| `if (x != null)` | `if (x is {} valor)` | Más expresiva, infiere tipo |
+| `if (x == null)` | `if (x is not {} valor)` | Más legible |
+| `if (x is Tipo)` | `if (x is Tipo var)` | Extrae variable directamente |
+
+```csharp
+// En lugar de:
+var persona = repository.GetById(id);
+if (persona == null)
+    return Result.Failure(...);
+
+// Puedes usar:
+if (repository.GetById(id) is {} persona)
+    return Result.Success(...);
+```
